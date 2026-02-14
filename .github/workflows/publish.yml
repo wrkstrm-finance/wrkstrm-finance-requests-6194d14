@@ -42,58 +42,48 @@ jobs:
             --transform-for-static-hosting \
             --hosting-base-path "${base_path}"
 
-          # Discover DocC landing path (pure Swift; do not guess).
-          export DOCC_INDEX_JSON_PATH="${output_root}/index/index.json"
-          landing_path=$(swift - <<'SWIFT'
-import Foundation
+          # Discover DocC landing path from the built index JSON (do not guess).
+          DOCC_INDEX_JSON_PATH="${output_root}/index/index.json"
+          landing_path=$(DOCC_INDEX_JSON_PATH="${DOCC_INDEX_JSON_PATH}" swift - <<'SWIFT'
+          import Foundation
 
-struct DoccIndex: Decodable {
-  struct Item: Decodable { let path: String }
-  let interfaceLanguages: [String: [Item]]
-}
+          struct DoccIndex: Decodable {
+            struct Item: Decodable { let path: String }
+            let interfaceLanguages: [String: [Item]]
+          }
 
-let env = ProcessInfo.processInfo.environment
-let indexPath = env["DOCC_INDEX_JSON_PATH"] ?? ""
-guard !indexPath.isEmpty else {
-  // Best-effort fallback
-  print("/documentation")
-  exit(0)
-}
+          let env = ProcessInfo.processInfo.environment
+          let indexPath = env["DOCC_INDEX_JSON_PATH"] ?? ""
 
-do {
-  let data = try Data(contentsOf: URL(fileURLWithPath: indexPath))
-  let idx = try JSONDecoder().decode(DoccIndex.self, from: data)
-  let items = idx.interfaceLanguages["swift"] ?? idx.interfaceLanguages.values.first ?? []
-  let raw = items.first?.path ?? "/documentation"
-  let normalized = "/" + raw.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-  print(normalized)
-} catch {
-  print("/documentation")
-}
-SWIFT
-)
+          func fallback() {
+            print("/documentation")
+          }
+
+          guard !indexPath.isEmpty else { fallback(); exit(0) }
+
+          do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: indexPath))
+            let idx = try JSONDecoder().decode(DoccIndex.self, from: data)
+            let items = idx.interfaceLanguages["swift"] ?? idx.interfaceLanguages.values.first ?? []
+            let raw = items.first?.path ?? "/documentation"
+            let normalized = "/" + raw.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            print(normalized)
+          } catch {
+            fallback()
+          }
+          SWIFT
+          )
           landing_path="/${landing_path#"/"}"
           landing_path="${landing_path%/}"
 
+          # Simple redirect root for nicer unfurls.
           cat > "${output_root}/index.html" <<EOF
           <!doctype html>
           <html lang="en">
           <head>
             <meta charset="utf-8"/>
             <meta name="viewport" content="width=device-width, initial-scale=1"/>
-            <title>wrkstrm-finance — Requests</title>
-            <meta name="description" content="Provisioned Requests share."/>
-
-            <meta property="og:type" content="website"/>
-            <meta property="og:title" content="wrkstrm-finance — Requests"/>
-            <meta property="og:description" content="Provisioned Requests share."/>
-            <meta property="og:image" content="https://github.com/wrkstrm-finance.png?size=512"/>
-
-            <meta name="twitter:image" content="https://github.com/wrkstrm-finance.png?size=512"/>
-            <meta name="twitter:card" content="summary_large_image"/>
-            <meta name="twitter:title" content="wrkstrm-finance — Requests"/>
-            <meta name="twitter:description" content="Provisioned Requests share."/>
-
+            <title>Requests</title>
             <meta http-equiv="refresh" content="0; url=${base_path}${landing_path}/"/>
           </head>
           <body>
